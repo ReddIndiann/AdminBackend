@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Channel Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f2f5;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-blue-100 to-white">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center text-blue-600 mb-8">
+            YouTube Channel Explorer
+        </h1>
+        <form id="form" class="mb-8 text-center">
+            <input type="submit" class="px-8 py-4 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-300 text-lg font-semibold shadow-lg" value="Discover Popular US Channels">
+        </form>
+        <div id="videos" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+        <div id="loadMoreContainer" class="text-center mt-8 hidden">
+            <button id="loadMore" class="px-8 py-4 bg-green-500 text-white rounded-full hover:bg-green-600 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-300 text-lg font-semibold shadow-lg">Load More</button>
+        </div>
+        <div id="exportContainer" class="text-center mt-8 hidden">
+            <button id="export" class="px-8 py-4 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-300 text-lg font-semibold shadow-lg">Export to CSV</button>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script>
+    $(document).ready(function(){
+        var API_KEY = "AIzaSyDW0naRLD4HWdiB4Sb4jmRv4RozqPVhi2Y";
+        var channelInfo = '';
+        var nextPageToken = '';
+        var search = "a";
+        var channelsData = [];
+        var loadMoreCount = 10;
+
+        // Initial search when form is submitted
+        $("#form").submit(function(event){
+            event.preventDefault();
+            $("#videos").empty();
+            nextPageToken = '';
+            channelsData = [];
+            channelSearch(API_KEY, search, 300);
+        });
+
+        // Load more channels when "Load More" is clicked
+        $("#loadMore").click(function(){
+            if (nextPageToken) {
+                channelSearch(API_KEY, search, loadMoreCount);
+            } else {
+                alert("No more channels to fetch.");
+                $(this).hide();
+            }
+        });
+
+        // Export data to CSV when "Export to CSV" is clicked
+        $("#export").click(function(){
+            exportToCSV();
+        });
+
+        // Function to search for channels
+        function channelSearch(key, search, maxResults){
+            $.get("https://www.googleapis.com/youtube/v3/search", {
+                key: key,
+                type: 'channel',
+                part: 'snippet',
+                maxResults: maxResults,
+                q: search,
+                regionCode: 'US',
+                pageToken: nextPageToken
+            }).done(function(data){
+                console.log('Search Results:', data);
+                nextPageToken = data.nextPageToken;
+                var channelIds = data.items.map(item => item.id.channelId).join(",");
+                if (channelIds) {
+                    getChannelDetails(key, channelIds);
+                } else {
+                    $("#videos").html("<p class='text-center text-gray-600'>No channels found.</p>");
+                }
+                $("#loadMoreContainer").show();
+                $("#exportContainer").show();
+
+                if (!nextPageToken) {
+                    $("#loadMoreContainer").hide();
+                    alert("No more channels to fetch.");
+                }
+            }).fail(function(jqXHR, textStatus, errorThrown){
+                console.error('Error fetching search results:', textStatus, errorThrown);
+            });
+        }
+
+        // Function to get channel details
+        function getChannelDetails(key, channelIds){
+            $.get("https://www.googleapis.com/youtube/v3/channels", {
+                key: key,
+                part: 'snippet,statistics',
+                id: channelIds
+            }).done(function(data){
+                console.log('Channel Details:', data);
+                data.items.forEach(item => {
+                    if (item.statistics.subscriberCount >= 60000) {
+                        var subscriberCount = new Intl.NumberFormat().format(item.statistics.subscriberCount);
+                        channelInfo = `
+                        <div class="bg-white rounded-lg overflow-hidden shadow-lg transition duration-300 ease-in-out transform hover:scale-105">
+                            <img src="${item.snippet.thumbnails.medium.url}" alt="${item.snippet.title}" class="w-full h-48 object-cover">
+                            <div class="p-6">
+                                <h3 class="text-xl font-semibold mb-2 text-gray-800">${item.snippet.title}</h3>
+                                <p class="text-gray-600 mb-2">Subscribers: ${subscriberCount}</p>
+                                <p class="text-gray-600 mb-4">Country: United States</p>
+                                <a href="https://www.youtube.com/channel/${item.id}" target="_blank" class="inline-block bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition duration-300 ease-in-out">Visit Channel</a>
+                            </div>
+                        </div>`;
+                        $("#videos").append(channelInfo);
+
+                        channelsData.push({
+                            name: item.snippet.title,
+                            subscribers: item.statistics.subscriberCount,
+                            url: `https://www.youtube.com/channel/${item.id}`
+                        });
+                    }
+                });
+                if ($("#videos").children().length === 0) {
+                    $("#videos").html("<p class='text-center text-gray-600'>No channels with 60k or more subscribers found.</p>");
+                }
+            }).fail(function(jqXHR, textStatus, errorThrown){
+                console.error('Error fetching channel details:', textStatus, errorThrown);
+            });
+        }
+
+        // Function to export data to CSV
+        function exportToCSV() {
+            var csv = 'Channel Name,Subscribers,Channel URL\n';
+            channelsData.forEach(function(row) {
+                csv += '"' + row.name + '","' + row.subscribers + '","' + row.url + '"\n';
+            });
+
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement("a");
+            if (link.download !== undefined) {
+                var url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "youtube_channels.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    });
+    </script>
+</body>
+</html>

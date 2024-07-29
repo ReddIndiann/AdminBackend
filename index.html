@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Channel Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f2f5;
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-blue-100 to-white">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-4xl font-bold text-center text-blue-600 mb-8">
+            YouTube Channel Explorer
+        </h1>
+        <form id="form" class="mb-8 text-center">
+            <input type="submit" class="px-8 py-4 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-300 text-lg font-semibold shadow-lg" value="Discover Popular Channels">
+        </form>
+        <div id="channels" class="space-y-4"></div>
+        <div id="exportContainer" class="text-center mt-8 hidden">
+            <button id="export" class="px-8 py-4 bg-purple-500 text-white rounded-full hover:bg-purple-600 transition duration-300 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-300 text-lg font-semibold shadow-lg">Export to CSV</button>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script>
+    $(document).ready(function(){
+        var channelsData = [];
+        var webAppUrl = "Yhttps://script.google.com/macros/s/AKfycby7REPhl3b4-9-bM31PCRrMGchFhMxosilB46SC0Lik87OsE9L-J4teI-ehdiatGqgQBg/exec"; // Replace with your actual Web App URL
+
+        $("#form").submit(function(event){
+            event.preventDefault();
+            $("#channels").empty();
+            channelsData = [];
+
+            $.get("http://localhost:3001/channels", function(data) {
+                data.forEach(item => {
+                    var channelInfo = `
+                    <div class="bg-white p-4 rounded-lg shadow">
+                        <h3 class="text-xl font-semibold mb-2">${item.snippet.title}</h3>
+                        <p>Subscribers: ${item.statistics.subscriberCount}</p>
+                        <p>Videos: ${item.statistics.videoCount}</p>
+                        <p>Views: ${item.statistics.viewCount}</p>
+                        <p>Country: ${item.snippet.country || 'Not specified'}</p>
+                        <p>Description: ${item.snippet.description}</p>
+                        <p>Published At: ${item.snippet.publishedAt}</p>
+                        <a href="https://www.youtube.com/channel/${item.id}" target="_blank" class="text-blue-500 hover:underline">Visit Channel</a>
+                    </div>`;
+                    $("#channels").append(channelInfo);
+
+                    var channelData = {
+                        name: item.snippet.title,
+                        subscribers: item.statistics.subscriberCount,
+                        videos: item.statistics.videoCount,
+                        views: item.statistics.viewCount,
+                        country: item.snippet.country || 'Not specified',
+                        description: item.snippet.description,
+                        publishedAt: item.snippet.publishedAt,
+                        url: `https://www.youtube.com/channel/${item.id}`
+                    };
+
+                    channelsData.push(channelData);
+                    sendToGoogleSheet(channelData);
+                });
+                if ($("#channels").children().length === 0) {
+                    $("#channels").html("<p class='text-center text-gray-600'>No channels with 60k or more subscribers and 40 or more videos found.</p>");
+                }
+                $("#exportContainer").show();
+            }).fail(function(jqXHR, textStatus, errorThrown){
+                console.error('Error fetching channels:', textStatus, errorThrown);
+            });
+        });
+
+        $("#export").click(function(){
+            exportToCSV();
+        });
+
+        function sendToGoogleSheet(channel) {
+            $.ajax({
+                url: webAppUrl,
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify(channel),
+                success: function(response) {
+                    console.log("Data sent successfully:", response);
+                },
+                error: function(error) {
+                    console.error("Error sending data:", error);
+                }
+            });
+        }
+
+        function exportToCSV() {
+            var csv = 'Channel Name,Subscribers,Videos,Views,Country,Description,Published At,Channel URL\n';
+            channelsData.forEach(function(row) {
+                csv += `"${row.name}","${row.subscribers}","${row.videos}","${row.views}","${row.country}","${row.description.replace(/"/g, '""')}","${row.publishedAt}","${row.url}"\n`;
+            });
+
+            var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement("a");
+            if (link.download !== undefined) {
+                var url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "youtube_channels.csv");
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    });
+    </script>
+</body>
+</html>
